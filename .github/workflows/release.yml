@@ -1,0 +1,94 @@
+name: Publish signed RUSS updates
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'assets/**'
+      - 'release/**'
+      - 'tests/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'build.rs'
+      - 'rust-toolchain.toml'
+      - '.github/workflows/release.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: russ-public-release
+  cancel-in-progress: true
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            artifact: linux
+            binary: target/release/russ
+          - os: windows-latest
+            artifact: windows
+            binary: target/release/russ.exe
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libx11-dev libxi-dev libxrandr-dev libxinerama-dev libxcursor-dev libwayland-dev libdbus-1-dev
+      - run: cargo test --locked
+      - run: cargo build --locked --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.binary }}
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux
+          path: target/release
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows
+          path: target/x86_64-pc-windows-msvc/release
+      - name: Check release repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test "$(gh api "repos/$GITHUB_REPOSITORY" --jq .private)" = false || { echo 'The update feed needs publicly downloadable release assets.'; exit 1; }
+          test "$(jq -r .manifest_url release/update-source.json)" = "https://github.com/$GITHUB_REPOSITORY/releases/latest/download/latest.json"
+      - name: Stage and sign Linux and Windows artifacts
+        env:
+          RUSS_UPDATE_SIGNING_KEY_PKCS8: ${{ secrets.RUSS_UPDATE_SIGNING_KEY_PKCS8 }}
+          RUSS_RELEASE_TAG: russ-${{ github.run_number }}-${{ github.sha }}
+        run: |
+          test -n "$RUSS_UPDATE_SIGNING_KEY_PKCS8" || { echo 'Set the RUSS_UPDATE_SIGNING_KEY_PKCS8 repository secret first.'; exit 1; }
+          chmod +x target/release/russ
+          target/release/russ --publish-updates
+          target/release/russ --export-internet-release --base-url "https://github.com/$GITHUB_REPOSITORY/releases/download/$RUSS_RELEASE_TAG/"
+      - name: Upload all assets before making the release public
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUSS_RELEASE_TAG: russ-${{ github.run_number }}-${{ github.sha }}
+        run: |
+          gh release create "$RUSS_RELEASE_TAG" target/internet-release/* --repo "$GITHUB_REPOSITORY" --draft --target "$GITHUB_SHA" --title "RUSS update $GITHUB_RUN_NUMBER" --notes 'Signed Linux and Windows update. RUSS checks this public release feed automatically every five minutes.'
+          gh release edit "$RUSS_RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest

@@ -158,12 +158,71 @@ Computers running **0.2.0 or older need one manual installation of 0.2.1**:
 their local-only updater cannot receive a feature it does not contain. After
 that, reachable clients on the LAN receive prompts automatically, including
 clients that return online later. Allow UDP `45889` and TCP `45890` through
-the firewall. Internet-wide update delivery is not configured: disconnected
-LANs and computers behind unrelated routers require a separate reachable
-release feed. No cloud service is contacted by this implementation.
+the firewall. Internet updates, described below, also work across unrelated
+routers and do not require this publishing computer to remain online.
 
 LAN advertisements are advisory. Trust is established by a pinned TLS
 publisher certificate, not by the broadcast packet or its SHA-256 alone.
+
+## Internet updates through GitHub Releases
+
+Version **0.2.2** includes the public release feed and publisher verification
+key from `release/update-source.json`. RUSS checks the GitHub Releases feed at
+startup and every five minutes while the app is open. Compatible signed updates
+download over HTTPS with rustls/TLS 1.3, verify their Ed25519 signature, target,
+size and SHA-256, then show **Install and restart**. Offline checks retry
+automatically; the file transfer and LAN receiver remain usable. No enable
+switch or IP/port forwarding is required for these outbound HTTPS checks.
+
+The feed URL is:
+`https://github.com/kaneki654/russ/releases/latest/download/latest.json`
+
+The URL is live only after a release containing `latest.json` and both binary
+assets has been published. A git push alone does not create a downloadable
+release. The `.github/workflows/release.yml` workflow builds and tests Linux
+x86_64 and Windows x86_64 on every application change pushed to `main`, signs
+the feed, uploads a draft release, then publishes it as Latest after all
+assets have uploaded. The repository and release downloads must be public.
+
+The signing key is kept outside the repository at the platform config path
+`russ/updates/publisher-signing.pk8` (mode `0600` on Unix). It must never be
+committed or shipped with the app. Add its PKCS#8 bytes, encoded as hexadecimal,
+to the GitHub Actions repository secret `RUSS_UPDATE_SIGNING_KEY_PKCS8`.
+The matching public key is safe to embed in the executable. Release export
+rejects a private key that does not match that embedded public key.
+
+The same RUSS executable provides publisher commands:
+
+```bash
+# Creates the private key only if it does not exist, and prints only its public key.
+./target/release/russ --init-update-signing
+
+# After building both targets, stage them locally.
+./target/release/russ --publish-updates
+
+# Export signed assets for a specific release directory on GitHub.
+./target/release/russ --export-internet-release \
+  --base-url https://github.com/kaneki654/russ/releases/download/v0.2.2/
+```
+
+The export writes `target/internet-release/latest.json` and the two binaries.
+Upload them together to that release before marking it Latest. The workflow
+uses a unique tag for each commit, so updates work even if the Cargo version
+was unchanged. The signed feed expires after 90 days and records a monotonically
+increasing publication time; clients persist the highest accepted sequence to
+reject older or conflicting feeds. Publish a fresh signed feed before expiry.
+
+Install **0.2.2 once on computers still running 0.2.1 or older** so they gain
+internet update support and the pinned publisher key. After that, future
+published releases prompt automatically anywhere GitHub is reachable. This
+does not change file-transfer reachability: transfers still need a direct
+network path between sender and receiver. Update checks contact GitHub and
+its download CDN; user files are not uploaded to either service.
+
+Security Settings shows the last internet-check result and offers **Save and
+check now**. Official releases ship with their URL and key already set;
+`RUSS_UPDATE_URL` and `RUSS_UPDATE_PUBLIC_KEY` can override them at build time
+for a different distribution channel.
 
 ## Linux
 

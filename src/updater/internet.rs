@@ -36,14 +36,16 @@ pub struct InternetUpdateConfig {
 
 impl Default for InternetUpdateConfig {
     fn default() -> Self {
-        Self {
-            manifest_url: option_env!("RUSS_UPDATE_URL")
-                .unwrap_or_default()
-                .to_owned(),
-            public_key: option_env!("RUSS_UPDATE_PUBLIC_KEY")
-                .unwrap_or_default()
-                .to_owned(),
+        let mut config: Self =
+            serde_json::from_str(include_str!("../../release/update-source.json"))
+                .expect("embedded update source must be valid JSON");
+        if let Some(url) = option_env!("RUSS_UPDATE_URL") {
+            config.manifest_url = url.to_owned();
         }
+        if let Some(key) = option_env!("RUSS_UPDATE_PUBLIC_KEY") {
+            config.public_key = key.to_owned();
+        }
+        config
     }
 }
 
@@ -432,7 +434,9 @@ fn load_key(path: &Path) -> Result<Ed25519KeyPair> {
         }
         value
             .as_bytes()
-            .chunks_exact(2)
+            .as_chunks::<2>()
+            .0
+            .iter()
             .map(|pair| {
                 u8::from_str_radix(std::str::from_utf8(pair)?, 16).map_err(anyhow::Error::from)
             })
@@ -484,6 +488,9 @@ pub fn export_release(
     output: &Path,
 ) -> Result<PathBuf> {
     let key = load_key(key_path)?;
+    if encode_hex(key.public_key().as_ref()) != InternetUpdateConfig::default().public_key {
+        bail!("signing key does not match the public key embedded in this release");
+    }
     let base = https_url(base_url)?;
     if !base.path().ends_with('/') || base.query().is_some() {
         bail!("asset base URL must end in / and contain no query")
@@ -549,7 +556,10 @@ fn decode_hex<const N: usize>(value: &str) -> Result<[u8; N]> {
         bail!("invalid hexadecimal key or digest length")
     }
     let mut bytes = [0_u8; N];
-    for (output, pair) in bytes.iter_mut().zip(value.as_bytes().chunks_exact(2)) {
+    for (output, pair) in bytes
+        .iter_mut()
+        .zip(value.as_bytes().as_chunks::<2>().0.iter())
+    {
         let text = std::str::from_utf8(pair)?;
         *output = u8::from_str_radix(text, 16).context("invalid hexadecimal key or digest")?;
     }

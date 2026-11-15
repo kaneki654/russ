@@ -398,11 +398,13 @@ fn watch_manifest(
         return;
     }
     if let Some(workspace) = &workspace {
-        if workspace.join("assets").is_dir() {
-            if let Err(error) = watcher.watch(&workspace.join("assets"), RecursiveMode::Recursive) {
-                let _ = events.send(UpdateEvent::Failed(format!(
-                    "watch application assets: {error}"
-                )));
+        for directory in ["assets", "release"] {
+            if workspace.join(directory).is_dir() {
+                if let Err(error) =
+                    watcher.watch(&workspace.join(directory), RecursiveMode::Recursive)
+                {
+                    let _ = events.send(UpdateEvent::Failed(format!("watch {directory}: {error}")));
+                }
             }
         }
         if let Err(error) = watcher.watch(&workspace.join("src"), RecursiveMode::Recursive) {
@@ -468,6 +470,7 @@ fn relevant_source_event(event: &Event, workspace: &Path) -> bool {
         && event.paths.iter().any(|path| {
             path.starts_with(workspace.join("src"))
                 || path.starts_with(workspace.join("assets"))
+                || path.starts_with(workspace.join("release"))
                 || matches!(
                     path.file_name().and_then(|name| name.to_str()),
                     Some("Cargo.toml")

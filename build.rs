@@ -4,6 +4,7 @@ fn main() {
     println!("cargo:rerun-if-env-changed=RUSS_UPDATE_URL");
     println!("cargo:rerun-if-env-changed=RUSS_UPDATE_PUBLIC_KEY");
     println!("cargo:rerun-if-changed=src");
+    println!("cargo:rerun-if-changed=release/update-source.json");
     let built = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .expect("build clock must be after the Unix epoch")

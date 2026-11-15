@@ -38,6 +38,11 @@ impl AppConfig {
             return Ok(Self::default());
         }
         let mut config: Self = database::load_json(&path)?;
+        if config.internet_updates.manifest_url.is_empty()
+            && config.internet_updates.public_key.is_empty()
+        {
+            config.internet_updates = Default::default();
+        }
         config.optimizer = config.optimizer.normalized();
         Ok(config)
     }
