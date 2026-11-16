@@ -255,6 +255,35 @@ service is needed.
 
 ## Windows
 
+Download/clone the complete source folder, extract it if it is a ZIP, and
+double-click **`build-windows.bat`** beside `Cargo.toml`. The batch file:
+
+1. Detects existing Microsoft C++ tools and the Windows SDK, installing missing
+   components from Microsoft's installer when necessary.
+2. Installs Rust/rustup/Cargo from the official Rust download server if missing,
+   verifies the installer's SHA-256, and sets up stable Rust for Windows x64.
+3. Adds Cargo to the current process and your user PATH, loads the compiler/SDK
+   environment immediately, and builds the optimized RUSS executable.
+
+The result is `target\x86_64-pc-windows-msvc\release\russ.exe`. No separate
+terminal setup or package manager is required. The first setup needs internet
+and can download several GB for Microsoft's build tools; approve the Windows
+administrator prompt if those tools are missing. If Windows requests a restart,
+restart and run the same batch file again. Running it again reuses installed
+prerequisites. The application itself remains Rust; Windows PowerShell 5.1,
+included in Windows 10/11, is used only inside the setup batch file.
+
+To build and launch directly from Command Prompt or PowerShell:
+
+```powershell
+.\build-windows.bat --run
+```
+
+For a terminal/CI build without the final keypress: `build-windows.bat --no-pause`.
+`build-windows.bat --help` shows its options without installing anything.
+
+For manual installation instead, follow the steps below.
+
 Install Rust with `rustup` and the **Desktop development with C++** workload
 from Visual Studio 2022 Build Tools (including the Windows 10 or 11 SDK).
 Then, from PowerShell in the project directory:

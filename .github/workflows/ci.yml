@@ -35,4 +35,6 @@ jobs:
           toolchain: stable
       - run: cargo check --all-targets
       - run: cargo test
-      - run: cargo build --release
+      - name: Build with the Windows bootstrap batch file
+        shell: cmd
+        run: build-windows.bat --no-pause
